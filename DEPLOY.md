@@ -15,10 +15,15 @@ web.de → yourdomain.com (GSuite, MX unchanged)
 
 Two ways to host it: **A) Railway** (no VPS needed) or **B) any cheap VPS**.
 
-## Option A: Railway (recommended)
+## Option A: Railway
 
 Since only GSuite connects to the receiver — on a custom port we choose —
 Railway's TCP Proxy feature can front it. No VPS, no DNS changes.
+
+Limitation: a Railway service gets only **one** public TCP proxy (used by
+SMTP), so the built-in IMAP server (Dovecot, port 143) is only reachable
+from inside the same Railway project via `mailserver.railway.internal`.
+If your mail client/bot runs outside Railway, use Option B instead.
 
 1. Push this project to a Git repo and create a new Railway service from it
    (the included `Dockerfile` is picked up automatically).
@@ -83,19 +88,20 @@ Do **not** touch MX or TXT/SPF records; GSuite keeps working untouched.
 ```bash
 # packages
 sudo apt update
-sudo apt install -y python3-venv python3-pip certbot ufw
+sudo apt install -y python3-venv python3-pip certbot ufw dovecot-imapd
 
 # firewall
 sudo ufw allow OpenSSH
 sudo ufw allow 2525/tcp    # SMTP from GSuite routing
+sudo ufw allow 993/tcp     # IMAPS for your mail client/bot
 sudo ufw allow 80/tcp      # certbot
 sudo ufw allow 8080/tcp    # API for your script
 sudo ufw enable
 
 # user + directories
 sudo useradd --system --home /opt/mailreceiver mailrecv
-sudo mkdir -p /opt/mailreceiver /var/lib/mailreceiver
-sudo chown mailrecv:mailrecv /var/lib/mailreceiver
+sudo mkdir -p /opt/mailreceiver /var/lib/mailreceiver/maildir
+sudo chown -R mailrecv:mailrecv /var/lib/mailreceiver
 
 # code (scp/rsync this project up first, or git clone)
 cd /opt/mailreceiver
@@ -105,9 +111,16 @@ sudo venv/bin/pip install -r requirements.txt
 # TLS certificate (uses port 80, needs the A record from step 1 live)
 sudo certbot certonly --standalone -d mail.example.com
 
-# let the service read the certs
+# let the services read the certs
 sudo chgrp -R mailrecv /etc/letsencrypt/live /etc/letsencrypt/archive
 sudo chmod 750 /etc/letsencrypt/live /etc/letsencrypt/archive
+sudo usermod -aG mailrecv dovecot
+
+# IMAP (Dovecot): config + one user. Replace the password!
+sudo cp deploy/dovecot.conf /etc/dovecot/dovecot.conf
+sudo sed -i 's/mail.example.com/mail.yourdomain.com/' /etc/dovecot/dovecot.conf
+printf 'bot:{PLAIN}your-strong-password\n' | sudo tee /etc/dovecot/users
+sudo systemctl enable --now dovecot
 
 # config
 sudo cp deploy/mailreceiver.env.example /etc/mailreceiver.env
@@ -120,10 +133,14 @@ sudo systemctl enable --now mailreceiver
 sudo journalctl -u mailreceiver -f   # watch the logs
 ```
 
+Your mail client/bot then uses: host `mail.example.com`, port `993`
+(IMAPS/SSL), username `bot`, the password you put in `/etc/dovecot/users`,
+mailbox `INBOX`.
+
 Add a renewal hook so the service reloads after certbot renews:
 
 ```bash
-printf '#!/bin/sh\nsystemctl restart mailreceiver\n' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/mailreceiver.sh
+printf '#!/bin/sh\nsystemctl restart mailreceiver dovecot\n' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/mailreceiver.sh
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/mailreceiver.sh
 ```
 
@@ -172,6 +189,9 @@ VPS: `https://mail.example.com:8080`):
 ```bash
 curl -H "Authorization: Bearer <API_TOKEN>" https://<api-host>/messages
 ```
+
+Test IMAP (VPS): `openssl s_client -connect mail.example.com:993`, then type
+`a1 login bot your-strong-password` — expect `a1 OK ... logged in`.
 
 ## 5. Your script on Railway
 
