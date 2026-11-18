@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import logging
+import mailbox
 import os
 import re
 import sqlite3
@@ -47,6 +48,9 @@ TLS_CERT = os.environ.get("TLS_CERT", "")
 TLS_KEY = os.environ.get("TLS_KEY", "")
 DB_PATH = os.environ.get("DB_PATH", "mail.db")
 ATTACH_DIR = Path(os.environ.get("ATTACH_DIR", "attachments"))
+# If set, every message is also delivered here in Maildir format so an IMAP
+# server (Dovecot) can serve it to mail clients.
+MAILDIR_PATH = os.environ.get("MAILDIR_PATH", "")
 MAX_MESSAGE_SIZE = int(os.environ.get("MAX_MESSAGE_SIZE", str(35 * 1024 * 1024)))
 ATTACHMENT_B64_LIMIT = int(os.environ.get("ATTACHMENT_B64_LIMIT", str(1024 * 1024)))
 
@@ -186,6 +190,12 @@ class SMTPHandler:
 
         log.info("stored message %s from=%s to=%s subject=%r",
                  row_id, envelope.mail_from, envelope.rcpt_tos, str(msg.get("subject", "")))
+
+        if MAILDIR_PATH:
+            try:
+                mailbox.Maildir(MAILDIR_PATH, create=True).add(envelope.content)
+            except Exception:
+                log.exception("maildir delivery failed for message %s", row_id)
 
         if WEBHOOK_URL:
             payload = {
@@ -349,6 +359,8 @@ def main() -> None:
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     init_db()
     ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+    if MAILDIR_PATH:
+        mailbox.Maildir(MAILDIR_PATH, create=True)
 
     tls_context = build_ssl_context()
 
