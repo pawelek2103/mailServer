@@ -111,10 +111,9 @@ sudo venv/bin/pip install -r requirements.txt
 # TLS certificate (uses port 80, needs the A record from step 1 live)
 sudo certbot certonly --standalone -d mail.example.com
 
-# let the services read the certs
+# let the services read the certs (directories need +x, the .pem files need +r)
 sudo chgrp -R mailrecv /etc/letsencrypt/live /etc/letsencrypt/archive
-sudo chmod 750 /etc/letsencrypt/live /etc/letsencrypt/archive
-sudo usermod -aG mailrecv dovecot
+sudo chmod -R g+rX /etc/letsencrypt/live /etc/letsencrypt/archive
 
 # IMAP (Dovecot): config + one user. Replace the password!
 sudo cp deploy/dovecot.conf /etc/dovecot/dovecot.conf
@@ -140,7 +139,7 @@ mailbox `INBOX`.
 Add a renewal hook so the service reloads after certbot renews:
 
 ```bash
-printf '#!/bin/sh\nsystemctl restart mailreceiver dovecot\n' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/mailreceiver.sh
+printf '#!/bin/sh\nchgrp -R mailrecv /etc/letsencrypt/live /etc/letsencrypt/archive\nchmod -R g+rX /etc/letsencrypt/live /etc/letsencrypt/archive\nsystemctl restart mailreceiver dovecot\n' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/mailreceiver.sh
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/mailreceiver.sh
 ```
 
