@@ -32,7 +32,7 @@ import aiohttp
 from aiohttp import web
 from aiosmtpd.controller import Controller
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(messages)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("mailreceiver")
 
 MAIL_DOMAINS = {d.strip().lower() for d in os.environ.get("MAIL_DOMAINS", "").split(",") if d.strip()}
