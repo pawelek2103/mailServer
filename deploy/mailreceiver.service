@@ -1,0 +1,17 @@
+[Unit]
+Description=Receive-only SMTP mail receiver
+After=network.target
+
+[Service]
+Type=simple
+User=mailrecv
+Group=mailrecv
+EnvironmentFile=/etc/mailreceiver.env
+WorkingDirectory=/opt/mailreceiver
+ExecStart=/opt/mailreceiver/venv/bin/python /opt/mailreceiver/receiver.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
