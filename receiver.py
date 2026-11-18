@@ -346,6 +346,7 @@ def build_ssl_context() -> ssl.SSLContext | None:
 def main() -> None:
     if not MAIL_DOMAINS:
         raise SystemExit("Set MAIL_DOMAINS to a comma-separated list of recipient domains to accept")
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     init_db()
     ATTACH_DIR.mkdir(parents=True, exist_ok=True)
 
