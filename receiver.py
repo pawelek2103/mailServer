@@ -121,6 +121,15 @@ def extract_bodies(msg) -> tuple[str, str, list[dict]]:
     return "\n".join(text_parts), "\n".join(html_parts), attachments
 
 
+def open_maildir(path: str) -> mailbox.Maildir:
+    # Maildir(create=True) only makes tmp/new/cur when the top dir does not
+    # exist yet; create them explicitly so pre-created dirs work too.
+    md = mailbox.Maildir(path, create=True)
+    for sub in ("tmp", "new", "cur"):
+        (Path(path) / sub).mkdir(exist_ok=True)
+    return md
+
+
 def sanitize_filename(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", name)[-100:] or "attachment"
 
@@ -193,7 +202,7 @@ class SMTPHandler:
 
         if MAILDIR_PATH:
             try:
-                mailbox.Maildir(MAILDIR_PATH, create=True).add(envelope.content)
+                open_maildir(MAILDIR_PATH).add(envelope.content)
             except Exception:
                 log.exception("maildir delivery failed for message %s", row_id)
 
@@ -360,7 +369,7 @@ def main() -> None:
     init_db()
     ATTACH_DIR.mkdir(parents=True, exist_ok=True)
     if MAILDIR_PATH:
-        mailbox.Maildir(MAILDIR_PATH, create=True)
+        open_maildir(MAILDIR_PATH)
 
     tls_context = build_ssl_context()
 
