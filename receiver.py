@@ -235,12 +235,21 @@ def _forward_sync(raw: bytes) -> None:
         s.sendmail(FORWARD_SMTP_USER, [FORWARD_TO], raw)
 
 
+FORWARD_RETRIES = int(os.environ.get("FORWARD_RETRIES", "3"))
+
+
 async def forward_copy(row_id: int, raw: bytes) -> None:
-    try:
-        await asyncio.to_thread(_forward_sync, raw)
-        log.info("forwarded copy of message %s to %s", row_id, FORWARD_TO)
-    except Exception:
-        log.exception("forwarding copy of message %s to %s failed", row_id, FORWARD_TO)
+    for attempt in range(1, FORWARD_RETRIES + 1):
+        try:
+            await asyncio.to_thread(_forward_sync, raw)
+            log.info("forwarded copy of message %s to %s", row_id, FORWARD_TO)
+            return
+        except Exception:
+            log.exception("forwarding copy of message %s to %s failed (attempt %s)",
+                          row_id, FORWARD_TO, attempt)
+        if attempt < FORWARD_RETRIES:
+            await asyncio.sleep(60 * attempt)
+    log.error("giving up forwarding message %s; it remains in the DB and maildir", row_id)
 
 
 async def deliver_webhook(row_id: int, payload: dict) -> None:
